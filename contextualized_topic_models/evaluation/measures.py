@@ -91,7 +91,7 @@ class CoherenceUCI(Coherence):
     def __init__(self, topics, texts):
         super().__init__(topics, texts)
 
-    def score(self, topk=10):
+    def score(self, topk=9):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: UCI coherence
