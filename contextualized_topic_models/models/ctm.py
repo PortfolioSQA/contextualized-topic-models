@@ -26,7 +26,7 @@ class CTM:
         :param input_size: int, dimension of input
         :param bert_input_size: int, dimension of input that comes from BERT embeddings
         :param inference_type: string, you can choose between the contextual model and the combined model
-        :param n_components: int, number of topic components, (default 10)
+        :param num_topics: int, number of topic components, (default 10)
         :param model_type: string, 'prodLDA' or 'LDA' (default 'prodLDA')
         :param hidden_sizes: tuple, length = n_layers, (default (100, 100))
         :param activation: string, 'softplus', 'relu', (default 'softplus')
@@ -41,10 +41,10 @@ class CTM:
         :param num_data_loader_workers: int, number of data loader workers (default cpu_count). set it to 0 if you are using Windows
     """
 
-    def __init__(self, input_size, bert_input_size, inference_type="combined", n_components=10, model_type='prodLDA',
+    def __init__(self, input_size, bert_input_size, inference_type="combined", num_topics=10, model_type='prodLDA',
                  hidden_sizes=(100, 100), activation='softplus', dropout=0.2,
-                 learn_priors=True, batch_size=64, lr=2e-3, momentum=0.99,
-                 solver='adam', num_epochs=100, reduce_on_plateau=False, num_data_loader_workers=mp.cpu_count()):
+                 learn_priors=True, batch_size=5, lr=2e-3, momentum=0.99,
+                 solver='adam', num_epochs=100, reduce_on_plateau=False, num_data_loader_workers=2): #mp.cpu_count()
         warnings.simplefilter('always', DeprecationWarning)
 
         if self.__class__.__name__ == "CTM":
@@ -54,8 +54,8 @@ class CTM:
 
         assert isinstance(input_size, int) and input_size > 0, \
             "input_size must by type int > 0."
-        assert isinstance(n_components, int) and input_size > 0, \
-            "n_components must by type int > 0."
+        assert isinstance(num_topics, int) and input_size > 0, \
+            "num_topics must by type int > 0."
         assert model_type in ['LDA', 'prodLDA'], \
             "model must be 'LDA' or 'prodLDA'."
         assert isinstance(hidden_sizes, tuple), \
@@ -76,7 +76,7 @@ class CTM:
             "num_data_loader_workers must by type int >= 0. set 0 if you are using windows"
 
         self.input_size = input_size
-        self.n_components = n_components
+        self.num_topics = num_topics
         self.model_type = model_type
         self.hidden_sizes = hidden_sizes
         self.activation = activation
@@ -92,7 +92,7 @@ class CTM:
         self.num_data_loader_workers = num_data_loader_workers
 
         self.model = DecoderNetwork(
-            input_size, self.bert_size, inference_type, n_components, model_type, hidden_sizes, activation,
+            input_size, self.bert_size, inference_type, num_topics, model_type, hidden_sizes, activation,
             dropout, learn_priors)
         self.early_stopping = None
 
@@ -146,7 +146,7 @@ class CTM:
             prior_variance.log().sum() - posterior_log_variance.sum(dim=1)
         # combine terms
         KL = 0.5 * (
-            var_division + diff_term - self.n_components + logvar_det_division)
+            var_division + diff_term - self.num_topics + logvar_det_division)
 
         # Reconstruction term
         RL = -torch.sum(inputs * torch.log(word_dists + 1e-10), dim=1)
@@ -218,8 +218,8 @@ class CTM:
                    Momentum: {}\n\
                    Reduce On Plateau: {}\n\
                    Save Dir: {}".format(
-                self.n_components, 0.0,
-                1. - (1. / self.n_components), self.model_type,
+                self.num_topics, 0.0,
+                1. - (1. / self.num_topics), self.model_type,
                 self.hidden_sizes, self.activation, self.dropout, self.learn_priors,
                 self.lr, self.momentum, self.reduce_on_plateau, save_dir))
 
@@ -335,7 +335,7 @@ class CTM:
         :param n_samples: the number of sample to collect to estimate the final distribution (the more the better).
         """
         self.model.eval()
-
+        
         loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False,
             num_workers=self.num_data_loader_workers)
@@ -373,7 +373,7 @@ class CTM:
         """
         return np.argmax(doc_topic_distribution, axis=0)
 
-    def predict(self, dataset, k=10):
+    def predict(self, dataset, k=9):
         """Predict input."""
         self.model.eval()
 
@@ -413,7 +413,7 @@ class CTM:
         assert k <= self.input_size, "k must be <= input size."
         component_dists = self.best_components
         topics = defaultdict(list)
-        for i in range(self.n_components):
+        for i in range(self.num_topics):
             _, idxs = torch.topk(component_dists[i], k)
             component_words = [self.train_data.idx2token[idx]
                                for idx in idxs.cpu().numpy()]
@@ -430,16 +430,17 @@ class CTM:
         # TODO: collapse this method with the one that just returns the topics
         component_dists = self.best_components
         topics = []
-        for i in range(self.n_components):
+        for i in range(self.num_topics):
             _, idxs = torch.topk(component_dists[i], k)
             component_words = [self.train_data.idx2token[idx]
                                for idx in idxs.cpu().numpy()]
+            print(component_words)
             topics.append(component_words)
         return topics
 
     def _format_file(self):
         model_dir = "contextualized_topic_model_nc_{}_tpm_{}_tpv_{}_hs_{}_ac_{}_do_{}_lr_{}_mo_{}_rp_{}". \
-            format(self.n_components, 0.0, 1 - (1. / self.n_components),
+            format(self.num_topics, 0.0, 1 - (1. / self.num_topics),
                    self.model_type, self.hidden_sizes, self.activation,
                    self.dropout, self.lr, self.momentum,
                    self.reduce_on_plateau)
@@ -513,7 +514,7 @@ class CTM:
 
         :returns list of tuples (word, probability) sorted by the probability in descending order
         """
-        if topic >= self.n_components:
+        if topic >= self.num_topics:
             raise Exception('Topic id must be lower than the number of topics')
         else:
             wd = self.get_topic_word_distribution()
@@ -535,9 +536,9 @@ class CTM:
         word_score_dict = {tup[0]: tup[1] for tup in word_score_list}
         plt.figure(figsize=(10, 4), dpi=200)
         plt.axis("off")
-        plt.imshow(wordcloud.WordCloud(width=1000, height=400, background_color=background_color
+        plt.imshow(wordcloud.WordCloud(width=900, height=350, background_color=background_color
                                        ).generate_from_frequencies(word_score_dict))
-        plt.title("Displaying Topic " + str(topic_id), loc='center', fontsize=24)
+        plt.title("Displaying Topic " + str(topic_id), loc='center', fontsize=22)
         plt.show()
 
     def get_predicted_topics(self, dataset, n_samples):
@@ -563,7 +564,7 @@ class ZeroShotTM(CTM):
 
     :param input_size: int, dimension of input
     :param bert_input_size: int, dimension of input that comes from BERT embeddings
-    :param n_components: int, number of topic components, (default 10)
+    :param num_topics: int, number of topic components, (default 10)
     :param model_type: string, 'prodLDA' or 'LDA' (default 'prodLDA')
     :param hidden_sizes: tuple, length = n_layers, (default (100, 100))
     :param activation: string, 'softplus', 'relu', (default 'softplus')
@@ -579,12 +580,12 @@ class ZeroShotTM(CTM):
 
     """
 
-    def __init__(self, input_size, bert_input_size, n_components=10, model_type='prodLDA',
+    def __init__(self, input_size, bert_input_size, num_topics=10, model_type='prodLDA',
                  hidden_sizes=(100, 100), activation='softplus', dropout=0.2,
                  learn_priors=True, batch_size=64, lr=2e-3, momentum=0.99,
                  solver='adam', num_epochs=100, reduce_on_plateau=False, num_data_loader_workers=mp.cpu_count()):
         inference_type = "zeroshot"
-        super().__init__(input_size, bert_input_size, inference_type, n_components, model_type,
+        super().__init__(input_size, bert_input_size, inference_type, num_topics, model_type,
                          hidden_sizes, activation, dropout,
                          learn_priors, batch_size, lr, momentum,
                          solver, num_epochs, reduce_on_plateau, num_data_loader_workers)
@@ -596,7 +597,7 @@ class CombinedTM(CTM):
 
     :param input_size: int, dimension of input
     :param bert_input_size: int, dimension of input that comes from BERT embeddings
-    :param n_components: int, number of topic components, (default 10)
+    :param num_topics: int, number of topic components, (default 10)
     :param model_type: string, 'prodLDA' or 'LDA' (default 'prodLDA')
     :param hidden_sizes: tuple, length = n_layers, (default (100, 100))
     :param activation: string, 'softplus', 'relu', (default 'softplus')
@@ -611,12 +612,12 @@ class CombinedTM(CTM):
     :param num_data_loader_workers: int, number of data loader workers (default cpu_count). set it to 0 if you are using Windows
     """
 
-    def __init__(self, input_size, bert_input_size, n_components=10, model_type='prodLDA',
+    def __init__(self, input_size, bert_input_size, num_topics=10, model_type='prodLDA',
                  hidden_sizes=(100, 100), activation='softplus', dropout=0.2,
                  learn_priors=True, batch_size=64, lr=2e-3, momentum=0.99,
                  solver='adam', num_epochs=100, reduce_on_plateau=False, num_data_loader_workers=mp.cpu_count()):
         inference_type = "combined"
-        super().__init__(input_size, bert_input_size, inference_type, n_components, model_type,
+        super().__init__(input_size, bert_input_size, inference_type, num_topics, model_type,
                          hidden_sizes, activation, dropout,
                          learn_priors, batch_size, lr, momentum,
                          solver, num_epochs, reduce_on_plateau, num_data_loader_workers)
