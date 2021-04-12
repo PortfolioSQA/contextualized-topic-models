@@ -23,7 +23,7 @@ class TopicDiversity(Measure):
         super().__init__()
         self.topics = topics
 
-    def score(self, topk=25):
+    def score(self, topk=9):
         """
         :param topk: topk words on which the topic diversity will be computed
         :return:
@@ -57,7 +57,7 @@ class CoherenceNPMI(Coherence):
     def __init__(self, topics, texts):
         super().__init__(topics, texts)
 
-    def score(self, topk=10):
+    def score(self, topk=5):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: NPMI coherence
@@ -74,7 +74,7 @@ class CoherenceUMASS(Coherence):
     def __init__(self, topics, texts):
         super().__init__(topics, texts)
 
-    def score(self, topk=10):
+    def score(self, topk=5):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: UMass coherence
@@ -91,7 +91,7 @@ class CoherenceUCI(Coherence):
     def __init__(self, topics, texts):
         super().__init__(topics, texts)
 
-    def score(self, topk=9):
+    def score(self, topk=5):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: UCI coherence
@@ -108,7 +108,7 @@ class CoherenceCV(Coherence):
     def __init__(self, topics, texts):
         super().__init__(topics, texts)
 
-    def score(self, topk=10):
+    def score(self, topk=9):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: C_V coherence
@@ -137,7 +137,7 @@ class CoherenceWordEmbeddings(Measure):
         else:
             self.wv = KeyedVectors.load_word2vec_format(word2vec_path, binary=binary)
 
-    def score(self, topk=10, binary= False):
+    def score(self, topk=9, binary= False):
         """
         :param topk: how many most likely words to consider in the evaluation
         :return: topic coherence computed on the word embeddings similarities
@@ -164,7 +164,7 @@ class InvertedRBO(Measure):
         super().__init__()
         self.topics = topics
 
-    def score(self, topk = 10, weight=0.9):
+    def score(self, topk = 5, weight=0.9):
         """
         :param weight: p (float), default 1.0: Weight of each agreement at depth d:
         p**(d-1). When set to 1.0, there is no weight, the rbo returns to average overlap.
@@ -236,7 +236,7 @@ def kl_div(a, b):
 
 class CentroidDistance(Measure):
     def __init__(self, doc_distribution_original_language, doc_distribution_unseen_language, topics,
-                 word2vec_path=None, binary=True, topk=10):
+                 word2vec_path=None, binary=True, topk=9):
         """
          :param doc_distribution_original_language: numpy array of the topical distribution of the
          documents in the original language (dim: num docs x num topics)
